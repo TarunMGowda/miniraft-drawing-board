@@ -3,7 +3,7 @@
 A cloud-native, fault-tolerant real-time collaboration application built to demonstrate distributed systems consensus. This project implements a custom Mini-RAFT algorithm to maintain a synchronized, append-only log of drawing strokes across a 3-node containerized cluster.
 
 **PES University | Department of Computer Science**
-* **Developer:** Tarun M Gowda (PES1UG23CS639)
+* **Developer:** Tarun M Gowda (PES1UG23CS639), Tarun Harithas (PES1UG23CS640), Syed Aman Sohrab (PES1UG23CS626), Swayam Shah (PES1UG23CS625)
 * Developed as part of a 4-person engineering team.
 
 ---
