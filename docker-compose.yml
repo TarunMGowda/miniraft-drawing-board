@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  gateway:
+    image: python:3.10-slim
+    working_dir: /app
+    volumes:
+      - ./gateway:/app
+    ports:
+      - "8080:8080"
+    command: >
+      bash -c "pip install -r requirements.txt && 
+      uvicorn main:app --host 0.0.0.0 --port 8080 --reload"
+
+  replica1:
+    image: python:3.10-slim
+    working_dir: /app
+    volumes:
+      - ./replica:/app
+    environment:
+      - REPLICA_ID=1
+      - PORT=8001
+    ports:
+      - "8001:8001"
+    command: >
+      bash -c "pip install -r requirements.txt && 
+      uvicorn main:app --host 0.0.0.0 --port 8001 --reload"
+
+  replica2:
+    image: python:3.10-slim
+    working_dir: /app
+    volumes:
+      - ./replica:/app
+    environment:
+      - REPLICA_ID=2
+      - PORT=8002
+    ports:
+      - "8002:8002"
+    command: >
+      bash -c "pip install -r requirements.txt && 
+      uvicorn main:app --host 0.0.0.0 --port 8002 --reload"
+
+  replica3:
+    image: python:3.10-slim
+    working_dir: /app
+    volumes:
+      - ./replica:/app
+    environment:
+      - REPLICA_ID=3
+      - PORT=8003
+    ports:
+      - "8003:8003"
+    command: >
+      bash -c "pip install -r requirements.txt && 
+      uvicorn main:app --host 0.0.0.0 --port 8003 --reload"

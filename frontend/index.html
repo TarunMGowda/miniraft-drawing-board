@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mini-RAFT Whiteboard</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; }
+        canvas { background: white; display: block; margin: 20px auto; border: 2px solid #555; }
+    </style>
+</head>
+<body>
+    <canvas id="board" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('board');
+        const ctx = canvas.getContext('2d');
+        const ws = new WebSocket('ws://localhost:8080/ws');
+
+        let drawing = false;
+
+        // Draw a line
+        function drawLine(x0, y0, x1, y1) {
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.closePath();
+        }
+
+        // Handle incoming strokes from the Gateway
+        ws.onmessage = (event) => {
+            const payload = JSON.parse(event.data);
+            
+            if (payload.type === 'sync') {
+                // If it's the initial sync, loop through the array and draw everything
+                payload.data.forEach(stroke => {
+                    drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1);
+                });
+            } else {
+                // Otherwise, it's just a normal real-time stroke from someone else
+                drawLine(payload.x0, payload.y0, payload.x1, payload.y1);
+            }
+        };
+
+        let x = 0, y = 0;
+
+        canvas.addEventListener('mousedown', e => {
+            x = e.offsetX; y = e.offsetY;
+            drawing = true;
+        });
+
+        canvas.addEventListener('mousemove', e => {
+            if (drawing) {
+                drawLine(x, y, e.offsetX, e.offsetY);
+                // Send stroke to Gateway
+                ws.send(JSON.stringify({ x0: x, y0: y, x1: e.offsetX, y1: e.offsetY }));
+                x = e.offsetX; y = e.offsetY;
+            }
+        });
+
+        window.addEventListener('mouseup', () => { drawing = false; });
+    </script>
+</body>
+</html>
