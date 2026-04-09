@@ -95,3 +95,9 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         connected_clients.remove(websocket)
         connected_clients.remove(websocket)
+
+@app.get("/cluster-status")
+async def get_cluster_status():
+    if current_leader_url:
+        return {"leader": current_leader_url, "status": "Healthy"}
+    return {"leader": "None", "status": "Searching for quorum..."}
