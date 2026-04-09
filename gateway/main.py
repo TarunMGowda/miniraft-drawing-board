@@ -20,7 +20,8 @@ current_leader_url = None
 REPLICA_URLS = [
     "http://replica1:8001",
     "http://replica2:8002",
-    "http://replica3:8003"
+    "http://replica3:8003",
+    "http://replica4:8004"
 ]
 
 @app.on_event("startup")
