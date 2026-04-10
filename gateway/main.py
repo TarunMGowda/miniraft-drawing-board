@@ -20,7 +20,8 @@ current_leader_url = None
 REPLICA_URLS = [
     "http://replica1:8001",
     "http://replica2:8002",
-    "http://replica3:8003"
+    "http://replica3:8003",
+    "http://replica4:8004"
 ]
 
 @app.on_event("startup")
@@ -94,3 +95,9 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         connected_clients.remove(websocket)
         connected_clients.remove(websocket)
+
+@app.get("/cluster-status")
+async def get_cluster_status():
+    if current_leader_url:
+        return {"leader": current_leader_url, "status": "Healthy"}
+    return {"leader": "None", "status": "Searching for quorum..."}

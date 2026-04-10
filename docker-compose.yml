@@ -53,3 +53,16 @@ services:
     command: >
       bash -c "pip install -r requirements.txt && 
       uvicorn main:app --host 0.0.0.0 --port 8003 --reload"
+  replica4:
+    image: python:3.10-slim
+    working_dir: /app
+    volumes:
+      - ./replica:/app
+    environment:
+      - REPLICA_ID=4
+      - PORT=8004
+    ports:
+      - "8004:8004"
+    command: >
+      bash -c "pip install -r requirements.txt && 
+      uvicorn main:app --host 0.0.0.0 --port 8004 --reload"

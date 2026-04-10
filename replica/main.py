@@ -15,7 +15,8 @@ PORT = int(os.getenv("PORT", 8001))
 ALL_REPLICAS = {
     1: "http://replica1:8001",
     2: "http://replica2:8002",
-    3: "http://replica3:8003"
+    3: "http://replica3:8003",
+    4: "http://replica4:8004"
 }
 PEERS = {id: url for id, url in ALL_REPLICAS.items() if id != REPLICA_ID}
 
@@ -140,7 +141,7 @@ async def start_election():
             except Exception:
                 pass
 
-    if votes_received >= 2 and node.state == RaftState.CANDIDATE:
+    if votes_received >= 3 and node.state == RaftState.CANDIDATE:
         print(f"\n🏆 Node {REPLICA_ID} WON THE ELECTION! Now LEADER for Term {node.current_term} 🏆\n")
         node.state = RaftState.LEADER
 
