@@ -2,14 +2,212 @@
 <html>
 <head>
     <title>Mini-RAFT Whiteboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; overflow: hidden; background: #222; }
+        body { margin: 0; overflow: hidden; background: #222; font-family: 'Inter', sans-serif; }
         canvas { background: white; display: block; margin: 20px auto; border: 2px solid #555; }
+
+        /* ===== Dashboard Panel ===== */
+        #dashboard {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 310px;
+            background: rgba(30, 30, 40, 0.92);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 14px;
+            padding: 20px;
+            color: #e0e0e0;
+            z-index: 100;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+        }
+
+        #dashboard h2 {
+            margin: 0 0 14px 0;
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: #a8b4ff;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #dashboard h2::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+            box-shadow: 0 0 8px #4ade80;
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; box-shadow: 0 0 8px #4ade80; }
+            50% { opacity: 0.5; box-shadow: 0 0 16px #4ade80; }
+        }
+
+        .dash-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .dash-row:last-child { border-bottom: none; }
+
+        .dash-label {
+            font-size: 12px;
+            color: #888;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .dash-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .dash-value.leader { color: #facc15; }
+        .dash-value.term   { color: #60a5fa; }
+
+        #replica-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        .replica-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 10px;
+            padding: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .replica-card:hover {
+            background: rgba(255,255,255,0.07);
+            border-color: rgba(255,255,255,0.14);
+            transform: translateY(-1px);
+        }
+
+        .replica-card.is-leader {
+            border-color: rgba(250,204,21,0.35);
+            background: rgba(250,204,21,0.06);
+        }
+
+        .replica-card.is-dead {
+            border-color: rgba(239,68,68,0.3);
+            background: rgba(239,68,68,0.06);
+            opacity: 0.7;
+        }
+
+        .replica-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+        }
+
+        .replica-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #4ade80;
+            flex-shrink: 0;
+        }
+
+        .replica-dot.dead { background: #ef4444; }
+
+        .replica-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: #ccc;
+        }
+
+        .replica-state {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 4px;
+        }
+
+        .replica-state.leader   { background: rgba(250,204,21,0.18); color: #facc15; }
+        .replica-state.follower { background: rgba(96,165,250,0.15); color: #60a5fa; }
+        .replica-state.candidate { background: rgba(251,146,60,0.18); color: #fb923c; }
+        .replica-state.dead     { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+        .replica-log {
+            font-size: 11px;
+            color: #888;
+            margin-top: 4px;
+        }
+        .replica-log span { color: #a78bfa; font-weight: 600; }
+
+        #dash-status-bar {
+            margin-top: 12px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 500;
+            text-align: center;
+            letter-spacing: 0.2px;
+        }
+
+        #dash-status-bar.healthy {
+            background: rgba(74,222,128,0.1);
+            color: #4ade80;
+            border: 1px solid rgba(74,222,128,0.2);
+        }
+
+        #dash-status-bar.degraded {
+            background: rgba(251,146,60,0.1);
+            color: #fb923c;
+            border: 1px solid rgba(251,146,60,0.2);
+        }
+
+        #dash-status-bar.down {
+            background: rgba(239,68,68,0.1);
+            color: #ef4444;
+            border: 1px solid rgba(239,68,68,0.2);
+        }
     </style>
 </head>
 <body>
+    <!-- ===== Dashboard Panel ===== -->
+    <div id="dashboard">
+        <h2>RAFT Cluster</h2>
+        <div class="dash-row">
+            <span class="dash-label">Leader</span>
+            <span class="dash-value leader" id="dash-leader">—</span>
+        </div>
+        <div class="dash-row">
+            <span class="dash-label">Term</span>
+            <span class="dash-value term" id="dash-term">—</span>
+        </div>
+        <div id="replica-grid"></div>
+        <div id="dash-status-bar" class="healthy">Connecting...</div>
+    </div>
+
+    <!-- ===== Canvas (unchanged) ===== -->
     <canvas id="board" width="800" height="600"></canvas>
+
     <script>
+        // ============================================================
+        //  EXISTING DRAWING FUNCTIONALITY (unchanged)
+        // ============================================================
         const canvas = document.getElementById('board');
         const ctx = canvas.getContext('2d');
         const ws = new WebSocket('ws://localhost:8080/ws');
@@ -59,6 +257,75 @@
         });
 
         window.addEventListener('mouseup', () => { drawing = false; });
+
+        // ============================================================
+        //  DASHBOARD: Poll /cluster-info every 2 seconds
+        // ============================================================
+        const dashLeader   = document.getElementById('dash-leader');
+        const dashTerm     = document.getElementById('dash-term');
+        const replicaGrid  = document.getElementById('replica-grid');
+        const statusBar    = document.getElementById('dash-status-bar');
+
+        async function refreshDashboard() {
+            try {
+                const res = await fetch('http://localhost:8080/cluster-info');
+                const info = await res.json();
+
+                // Leader name
+                if (info.leader) {
+                    dashLeader.textContent = `Replica ${info.leader.id}`;
+                    dashTerm.textContent   = info.leader.term;
+                } else {
+                    dashLeader.textContent = 'None';
+                    dashTerm.textContent   = '—';
+                }
+
+                // Replica cards
+                const aliveCount = info.replicas.filter(r => r.alive).length;
+                replicaGrid.innerHTML = '';
+
+                info.replicas.forEach(r => {
+                    const card = document.createElement('div');
+                    card.className = 'replica-card';
+                    if (!r.alive) card.classList.add('is-dead');
+                    if (r.state === 'LEADER') card.classList.add('is-leader');
+
+                    const stateClass = r.alive ? (r.state || 'follower').toLowerCase() : 'dead';
+                    const stateText  = r.alive ? (r.state || 'UNKNOWN') : 'OFFLINE';
+                    const replicaId  = r.id || r.url.split('replica')[1]?.charAt(0) || '?';
+
+                    card.innerHTML = `
+                        <div class="replica-header">
+                            <div class="replica-dot ${r.alive ? '' : 'dead'}"></div>
+                            <span class="replica-name">Replica ${replicaId}</span>
+                        </div>
+                        <span class="replica-state ${stateClass}">${stateText}</span>
+                        <div class="replica-log">Log: <span>${r.alive ? r.log_size : '—'}</span></div>
+                    `;
+                    replicaGrid.appendChild(card);
+                });
+
+                // Status bar
+                if (aliveCount === info.replicas.length && info.leader) {
+                    statusBar.className = 'healthy';
+                    statusBar.textContent = `✓ Cluster Healthy · ${aliveCount}/${info.replicas.length} nodes`;
+                } else if (aliveCount >= 3) {
+                    statusBar.className = 'degraded';
+                    statusBar.textContent = `⚠ Degraded · ${aliveCount}/${info.replicas.length} nodes online`;
+                } else {
+                    statusBar.className = 'down';
+                    statusBar.textContent = `✕ Quorum Lost · ${aliveCount}/${info.replicas.length} nodes online`;
+                }
+            } catch (err) {
+                statusBar.className = 'down';
+                statusBar.textContent = '✕ Gateway unreachable';
+            }
+        }
+
+        // Poll every 2 seconds
+        setInterval(refreshDashboard, 2000);
+        // Initial fetch
+        refreshDashboard();
     </script>
 </body>
 </html>
