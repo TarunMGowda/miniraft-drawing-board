@@ -7,6 +7,48 @@
         body { margin: 0; overflow: hidden; background: #222; font-family: 'Inter', sans-serif; }
         canvas { background: white; display: block; margin: 20px auto; border: 2px solid #555; }
 
+        /* ===== Undo/Redo Toolbar ===== */
+        #toolbar {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+
+        .toolbar-btn {
+            background: rgba(30, 30, 40, 0.92);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: #e0e0e0;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .toolbar-btn:hover:not(:disabled) {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.2);
+            transform: translateY(-1px);
+        }
+
+        .toolbar-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .toolbar-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
         /* ===== Dashboard Panel ===== */
         #dashboard {
             position: fixed;
@@ -186,6 +228,24 @@
     </style>
 </head>
 <body>
+    <!-- ===== Undo/Redo Toolbar ===== -->
+    <div id="toolbar">
+        <button id="undo-btn" class="toolbar-btn" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 7v6h6"></path>
+                <path d="M21 17a9 9 0 00-9-9 9 9 0 00-6 2.3L3 13"></path>
+            </svg>
+            Undo
+        </button>
+        <button id="redo-btn" class="toolbar-btn" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 7v6h-6"></path>
+                <path d="M3 17a9 9 0 019-9 9 9 0 006 2.3L21 13"></path>
+            </svg>
+            Redo
+        </button>
+    </div>
+
     <!-- ===== Dashboard Panel ===== -->
     <div id="dashboard">
         <h2>RAFT Cluster</h2>
@@ -225,38 +285,236 @@
             ctx.closePath();
         }
 
-        // Handle incoming strokes from the Gateway
+// Handle incoming messages from the Gateway
         ws.onmessage = (event) => {
             const payload = JSON.parse(event.data);
-            
+
             if (payload.type === 'sync') {
-                // If it's the initial sync, loop through the array and draw everything
-                payload.data.forEach(stroke => {
-                    drawLine(stroke.x0, stroke.y0, stroke.x1, stroke.y1);
+                // Initial sync: load all commands and replay to current state
+                strokeHistory = [];
+                undoneStrokes = [];
+
+                payload.data.forEach(command => {
+                    if (command.type === 'stroke') {
+                        strokeHistory.push(command);
+                    } else if (command.type === 'undo') {
+                        const stroke = strokeHistory.find(s => s.id === command.targetStrokeId);
+                        if (stroke) {
+                            strokeHistory = strokeHistory.filter(s => s.id !== stroke.id);
+                            undoneStrokes.push(stroke);
+                        }
+                    } else if (command.type === 'redo') {
+                        const stroke = undoneStrokes.find(s => s.id === command.targetStrokeId);
+                        if (stroke) {
+                            undoneStrokes = undoneStrokes.filter(s => s.id !== stroke.id);
+                            strokeHistory.push(stroke);
+                        }
+                    }
                 });
+
+                redrawCanvas();
+                updateButtonStates();
             } else {
-                // Otherwise, it's just a normal real-time stroke from someone else
-                drawLine(payload.x0, payload.y0, payload.x1, payload.y1);
+                // Real-time command from another client
+                handleCommand(payload);
             }
         };
 
-        let x = 0, y = 0;
+        let currentX = 0, currentY = 0; // Track current drawing position
 
         canvas.addEventListener('mousedown', e => {
-            x = e.offsetX; y = e.offsetY;
-            drawing = true;
+            const rect = canvas.getBoundingClientRect();
+            currentX = e.clientX - rect.left;
+            currentY = e.clientY - rect.top;
+            startBrushStroke(currentX, currentY);
         });
 
         canvas.addEventListener('mousemove', e => {
-            if (drawing) {
-                drawLine(x, y, e.offsetX, e.offsetY);
-                // Send stroke to Gateway
-                ws.send(JSON.stringify({ x0: x, y0: y, x1: e.offsetX, y1: e.offsetY }));
-                x = e.offsetX; y = e.offsetY;
+            if (isDrawing) {
+                const rect = canvas.getBoundingClientRect();
+                const newX = e.clientX - rect.left;
+                const newY = e.clientY - rect.top;
+
+                // Draw the line segment immediately
+                drawLine(currentX, currentY, newX, newY);
+
+                // Add segment to current brush stroke
+                addBrushSegment(currentX, currentY, newX, newY);
+
+                currentX = newX;
+                currentY = newY;
             }
         });
 
-        window.addEventListener('mouseup', () => { drawing = false; });
+        canvas.addEventListener('mouseup', () => {
+            if (isDrawing) {
+                finishBrushStroke();
+            }
+        });
+
+        // Handle mouse leaving canvas (finish stroke)
+        canvas.addEventListener('mouseleave', () => {
+            if (isDrawing) {
+                finishBrushStroke();
+            }
+        });
+
+        // ============================================================
+        //  UNDO/REDO FUNCTIONALITY (Stroke Batching)
+        // ============================================================
+        let strokeHistory = []; // All completed brush strokes
+        let undoneStrokes = []; // Strokes that have been undone
+        let currentBrushStroke = null; // Current stroke being drawn
+        let isDrawing = false;
+
+        // Get references to undo/redo buttons
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+
+        // Update button states
+        function updateButtonStates() {
+            undoBtn.disabled = strokeHistory.length === 0;
+            redoBtn.disabled = undoneStrokes.length === 0;
+        }
+
+        // Generate unique stroke ID
+        function generateStrokeId() {
+            return `stroke_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+
+        // Start a new brush stroke
+        function startBrushStroke(x, y) {
+            currentBrushStroke = {
+                id: generateStrokeId(),
+                type: 'stroke',
+                segments: [], // Array of {x0, y0, x1, y1}
+                timestamp: Date.now()
+            };
+            isDrawing = true;
+        }
+
+        // Add segment to current brush stroke
+        function addBrushSegment(x0, y0, x1, y1) {
+            if (currentBrushStroke && isDrawing) {
+                currentBrushStroke.segments.push({x0, y0, x1, y1});
+            }
+        }
+
+        // Finish current brush stroke and send to server
+        function finishBrushStroke() {
+            if (currentBrushStroke && currentBrushStroke.segments.length > 0) {
+                // Add to local history
+                strokeHistory.push(currentBrushStroke);
+                undoneStrokes = []; // Clear redo stack when new stroke is drawn
+                updateButtonStates();
+
+                // Send complete brush stroke to server
+                ws.send(JSON.stringify(currentBrushStroke));
+            }
+            currentBrushStroke = null;
+            isDrawing = false;
+        }
+
+        // Send undo command
+        function sendUndo() {
+            if (strokeHistory.length === 0) return;
+
+            const lastStroke = strokeHistory[strokeHistory.length - 1];
+            const undoCommand = {
+                id: generateStrokeId(),
+                type: 'undo',
+                targetStrokeId: lastStroke.id,
+                timestamp: Date.now()
+            };
+
+            ws.send(JSON.stringify(undoCommand));
+            performUndoLocally(lastStroke);
+        }
+
+        // Send redo command
+        function sendRedo() {
+            if (undoneStrokes.length === 0) return;
+
+            const strokeToRedo = undoneStrokes[undoneStrokes.length - 1];
+            const redoCommand = {
+                id: generateStrokeId(),
+                type: 'redo',
+                targetStrokeId: strokeToRedo.id,
+                timestamp: Date.now()
+            };
+
+            ws.send(JSON.stringify(redoCommand));
+            performRedoLocally(strokeToRedo);
+        }
+
+        // Perform undo locally (remove entire stroke from canvas)
+        function performUndoLocally(stroke) {
+            strokeHistory = strokeHistory.filter(s => s.id !== stroke.id);
+            undoneStrokes.push(stroke);
+            redrawCanvas();
+            updateButtonStates();
+        }
+
+        // Perform redo locally (add entire stroke back to canvas)
+        function performRedoLocally(stroke) {
+            undoneStrokes = undoneStrokes.filter(s => s.id !== stroke.id);
+            strokeHistory.push(stroke);
+            redrawCanvas();
+            updateButtonStates();
+        }
+
+        // Redraw entire canvas from history
+        function redrawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            strokeHistory.forEach(stroke => {
+                if (stroke.type === 'stroke' && stroke.segments) {
+                    stroke.segments.forEach(segment => {
+                        drawLine(segment.x0, segment.y0, segment.x1, segment.y1);
+                    });
+                }
+            });
+        }
+
+        // Handle commands from other clients
+        function handleCommand(command) {
+            if (command.type === 'stroke') {
+                // Add new stroke from another client
+                if (!strokeHistory.find(s => s.id === command.id)) {
+                    strokeHistory.push(command);
+                    redrawCanvas();
+                    updateButtonStates();
+                }
+            } else if (command.type === 'undo') {
+                // Handle undo from another client
+                const stroke = strokeHistory.find(s => s.id === command.targetStrokeId);
+                if (stroke) {
+                    performUndoLocally(stroke);
+                }
+            } else if (command.type === 'redo') {
+                // Handle redo from another client
+                const stroke = undoneStrokes.find(s => s.id === command.targetStrokeId);
+                if (stroke) {
+                    performRedoLocally(stroke);
+                }
+            }
+        }
+
+        // Button event listeners
+        undoBtn.addEventListener('click', sendUndo);
+        redoBtn.addEventListener('click', sendRedo);
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'z' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendUndo();
+                } else if ((e.key === 'y') || (e.key === 'z' && e.shiftKey)) {
+                    e.preventDefault();
+                    sendRedo();
+                }
+            }
+        });
 
         // ============================================================
         //  DASHBOARD: Poll /cluster-info every 2 seconds
