@@ -192,12 +192,27 @@ async def get_status():
     return {"id": REPLICA_ID, "state": node.state, "term": node.current_term, "log_size": len(node.log)}
 
 @app.post("/stroke")
-async def receive_stroke(stroke: dict):
+async def receive_stroke(message: dict):
     if node.state != RaftState.LEADER:
         return {"error": "Not the leader"}
-    
-    node.log.append(stroke)
-    return {"success": True, "stroke": stroke}
+
+    # Handle different message types
+    if message.get('type') in ['stroke', 'undo', 'redo']:
+        node.log.append(message)
+        return {"success": True, "message": message}
+    else:
+        # Legacy stroke format - convert to new format
+        stroke_with_id = {
+            "id": f"stroke_{int(time.time() * 1000)}_{random.randint(1000, 9999)}",
+            "type": "stroke",
+            "x0": message.get("x0"),
+            "y0": message.get("y0"),
+            "x1": message.get("x1"),
+            "y1": message.get("y1"),
+            "timestamp": int(time.time() * 1000)
+        }
+        node.log.append(stroke_with_id)
+        return {"success": True, "stroke": stroke_with_id}
 
 @app.get("/log")
 async def get_log():

@@ -76,21 +76,31 @@ async def websocket_endpoint(websocket: WebSocket):
             # Normal real-time listening loop
             while True:
                 data = await websocket.receive_text()
-                stroke = json.loads(data)
-                
+                message = json.loads(data)
+
                 # Forward to the RAFT Leader
                 if current_leader_url:
                     try:
-                        res = await client.post(f"{current_leader_url}/stroke", json=stroke)
-                        if res.status_code == 200 and "success" in res.json():
-                            # Once Leader accepts it, broadcast to all clients
-                            for client_ws in connected_clients:
-                                if client_ws != websocket:
-                                    await client_ws.send_text(data)
+                        if message.get('type') in ['stroke', 'undo', 'redo']:
+                            # Handle strokes and undo/redo commands
+                            res = await client.post(f"{current_leader_url}/stroke", json=message)
+                            if res.status_code == 200 and "success" in res.json():
+                                # Once Leader accepts it, broadcast to all clients
+                                for client_ws in connected_clients:
+                                    if client_ws != websocket:
+                                        await client_ws.send_text(data)
+                        else:
+                            # Legacy stroke format (for backward compatibility)
+                            res = await client.post(f"{current_leader_url}/stroke", json=message)
+                            if res.status_code == 200 and "success" in res.json():
+                                # Once Leader accepts it, broadcast to all clients
+                                for client_ws in connected_clients:
+                                    if client_ws != websocket:
+                                        await client_ws.send_text(data)
                     except Exception as e:
                         pass
                 else:
-                    print("Gateway: Stroke dropped, no leader available.")
+                    print("Gateway: Message dropped, no leader available.")
                     
     except WebSocketDisconnect:
         connected_clients.remove(websocket)
