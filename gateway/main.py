@@ -101,3 +101,37 @@ async def get_cluster_status():
     if current_leader_url:
         return {"leader": current_leader_url, "status": "Healthy"}
     return {"leader": "None", "status": "Searching for quorum..."}
+
+@app.get("/cluster-info")
+async def get_cluster_info():
+    """Returns detailed status of every replica for the dashboard."""
+    replicas = []
+    async with httpx.AsyncClient() as client:
+        for url in REPLICA_URLS:
+            try:
+                response = await client.get(f"{url}/status", timeout=0.5)
+                if response.status_code == 200:
+                    data = response.json()
+                    replicas.append({
+                        "id": data.get("id"),
+                        "url": url,
+                        "state": data.get("state"),
+                        "term": data.get("term"),
+                        "log_size": data.get("log_size"),
+                        "alive": True
+                    })
+                else:
+                    replicas.append({"url": url, "alive": False})
+            except Exception:
+                replicas.append({"url": url, "alive": False})
+
+    leader_info = None
+    for r in replicas:
+        if r.get("state") == "LEADER":
+            leader_info = r
+            break
+
+    return {
+        "leader": leader_info,
+        "replicas": replicas
+    }
