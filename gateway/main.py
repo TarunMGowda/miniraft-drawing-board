@@ -1,10 +1,12 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 import asyncio
 import httpx
 import json
 
 app = FastAPI()
+app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
 app.add_middleware(
     CORSMiddleware,
