@@ -6,7 +6,6 @@ services:
     working_dir: /app
     volumes:
       - ./gateway:/app
-      - ./frontend:/frontend
     ports:
       - "8080:8080"
     command: >
